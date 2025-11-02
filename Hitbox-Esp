@@ -1,0 +1,697 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ContentProvider = game:GetService("ContentProvider")
+local TweenService = game:GetService("TweenService")
+local localPlayer = Players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+local workspaceCamera = workspace.CurrentCamera
+
+local Config = {
+    HeadSize = 10,
+    HeadTransparency = 1,
+    HbeEnabled = false,
+    EspEnabled = false,
+    EspHighlight = true,
+    EspNameTags = true,
+    EspDistance = true,
+    CurrentTab = "HBE",
+    HeadSolid = false,
+}
+
+local DECAL_ID = "118202274834565"
+local IMAGE_URL = "https://i.ibb.co/WmnffKN/81367246-3-AD1-4-D3-E-88-F6-B750483-E3-FAC.png"
+
+local ESPObjects = {}
+local FloatingIconDragging = false
+local dragInput, dragStart, startPos, dragMoved = nil, nil, nil, false
+local swappedHeads = {}
+local UI_WIDTH, UI_HEIGHT = 300, 180
+local UI_POS = UDim2.new(0.5, -UI_WIDTH/2, 0.5, -UI_HEIGHT/2)
+
+local VortexGui = Instance.new("ScreenGui")
+VortexGui.Name = "VortexGui"
+VortexGui.ResetOnSpawn = false
+VortexGui.Parent = playerGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, UI_WIDTH, 0, UI_HEIGHT)
+MainFrame.Position = UI_POS
+MainFrame.BackgroundColor3 = Color3.fromRGB(0,0,0)
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = VortexGui
+
+local TopBar = Instance.new("Frame")
+TopBar.Name = "TopBar"
+TopBar.Size = UDim2.new(1,0,0,28)
+TopBar.Position = UDim2.new(0,0,0,0)
+TopBar.BackgroundColor3 = Color3.fromRGB(42,6,6)
+TopBar.BorderSizePixel = 0
+TopBar.Parent = MainFrame
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Size = UDim2.new(0.7,0,1,0)
+TitleLabel.Position = UDim2.new(0,10,0,0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.TextColor3 = Color3.fromRGB(255,255,255)
+TitleLabel.Text = "Vortex Hbe & Esp"
+TitleLabel.Font = Enum.Font.GothamSemibold
+TitleLabel.TextSize = 14
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = TopBar
+
+local CloseButton = Instance.new("TextButton")
+CloseButton.Name = "CloseButton"
+CloseButton.Size = UDim2.new(0,24,0,20)
+CloseButton.Position = UDim2.new(1,-30,0,4)
+CloseButton.BackgroundColor3 = Color3.fromRGB(42,6,6)
+CloseButton.BorderSizePixel = 0
+CloseButton.TextColor3 = Color3.fromRGB(255,255,255)
+CloseButton.Text = "×"
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.TextSize = 16
+CloseButton.Parent = TopBar
+
+local TabContainer = Instance.new("Frame")
+TabContainer.Name = "TabContainer"
+TabContainer.Size = UDim2.new(1,-20,0,24)
+TabContainer.Position = UDim2.new(0,10,0,32)
+TabContainer.BackgroundColor3 = Color3.fromRGB(18,2,2)
+TabContainer.BorderSizePixel = 0
+TabContainer.Parent = MainFrame
+
+local function MakeWhiteLabel(parent, props)
+    local lbl = Instance.new("TextLabel")
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = Color3.fromRGB(255,255,255)
+    for k,v in pairs(props or {}) do lbl[k]=v end
+    lbl.Parent = parent
+    return lbl
+end
+
+local HbeTab = Instance.new("TextButton")
+HbeTab.Name = "HbeTab"
+HbeTab.Size = UDim2.new(0.5,-2,1,0)
+HbeTab.Position = UDim2.new(0,0,0,0)
+HbeTab.BackgroundColor3 = Color3.fromRGB(90,10,10)
+HbeTab.BorderSizePixel = 0
+HbeTab.Text = "HITBOX"
+HbeTab.Font = Enum.Font.Gotham
+HbeTab.TextSize = 12
+HbeTab.TextColor3 = Color3.fromRGB(255,255,255)
+HbeTab.Parent = TabContainer
+
+local EspTab = Instance.new("TextButton")
+EspTab.Name = "EspTab"
+EspTab.Size = UDim2.new(0.5,-2,1,0)
+EspTab.Position = UDim2.new(0.5,2,0,0)
+EspTab.BackgroundColor3 = Color3.fromRGB(12,12,12)
+EspTab.BorderSizePixel = 0
+EspTab.Text = "ESP"
+EspTab.Font = Enum.Font.Gotham
+EspTab.TextSize = 12
+EspTab.TextColor3 = Color3.fromRGB(255,255,255)
+EspTab.Parent = TabContainer
+
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Name = "ContentFrame"
+ContentFrame.Size = UDim2.new(1,-20,1,-64)
+ContentFrame.Position = UDim2.new(0,10,0,58)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainFrame
+
+local HbePage = Instance.new("Frame")
+HbePage.Name = "HbePage"
+HbePage.Size = UDim2.new(1,0,1,0)
+HbePage.BackgroundTransparency = 1
+HbePage.Visible = true
+HbePage.Parent = ContentFrame
+
+local HbeTitle = MakeWhiteLabel(HbePage, {Size=UDim2.new(0.6,0,0,18), Position=UDim2.new(0,6,0,0), Text="Hitbox Extender", Font=Enum.Font.GothamSemibold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+local HbeToggle = Instance.new("TextButton")
+HbeToggle.Name = "HbeToggle"
+HbeToggle.Size = UDim2.new(0,48,0,18)
+HbeToggle.Position = UDim2.new(1,-58,0,0)
+HbeToggle.BackgroundColor3 = Color3.fromRGB(50,6,6)
+HbeToggle.TextColor3 = Color3.fromRGB(255,255,255)
+HbeToggle.Text = "OFF"
+HbeToggle.Font = Enum.Font.Gotham
+HbeToggle.TextSize = 10
+HbeToggle.Parent = HbePage
+
+local HeadSizeBox = Instance.new("TextBox")
+HeadSizeBox.Name = "HeadSizeBox"
+HeadSizeBox.Size = UDim2.new(0,60,0,18)
+HeadSizeBox.Position = UDim2.new(1,-70,0,22)
+HeadSizeBox.BackgroundColor3 = Color3.fromRGB(16,16,16)
+HeadSizeBox.TextColor3 = Color3.fromRGB(255,255,255)
+HeadSizeBox.Text = tostring(Config.HeadSize)
+HeadSizeBox.Font = Enum.Font.Gotham
+HeadSizeBox.TextSize = 11
+HeadSizeBox.Parent = HbePage
+
+local TransparencyBox = Instance.new("TextBox")
+TransparencyBox.Name = "TransparencyBox"
+TransparencyBox.Size = UDim2.new(0,60,0,18)
+TransparencyBox.Position = UDim2.new(1,-70,0,44)
+TransparencyBox.BackgroundColor3 = Color3.fromRGB(16,16,16)
+TransparencyBox.TextColor3 = Color3.fromRGB(255,255,255)
+TransparencyBox.Text = tostring(Config.HeadTransparency)
+TransparencyBox.Font = Enum.Font.Gotham
+TransparencyBox.TextSize = 11
+TransparencyBox.Parent = HbePage
+
+local HeadSolidLabel = MakeWhiteLabel(HbePage, {Size=UDim2.new(0.6,0,0,18), Position=UDim2.new(0,6,0,44), Text="HeadSolid (opaque)", Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+local HeadSolidToggle = Instance.new("TextButton")
+HeadSolidToggle.Name = "HeadSolidToggle"
+HeadSolidToggle.Size = UDim2.new(0,48,0,18)
+HeadSolidToggle.Position = UDim2.new(1,-58,0,44)
+HeadSolidToggle.BackgroundColor3 = Color3.fromRGB(50,6,6)
+HeadSolidToggle.TextColor3 = Color3.fromRGB(255,255,255)
+HeadSolidToggle.Text = "OFF"
+HeadSolidToggle.Font = Enum.Font.Gotham
+HeadSolidToggle.TextSize = 10
+HeadSolidToggle.Parent = HbePage
+
+local EspPage = Instance.new("Frame")
+EspPage.Name = "EspPage"
+EspPage.Size = UDim2.new(1,0,1,0)
+EspPage.BackgroundTransparency = 1
+EspPage.Visible = false
+EspPage.Parent = ContentFrame
+
+local EspToggle = Instance.new("TextButton")
+EspToggle.Name = "EspToggle"
+EspToggle.Size = UDim2.new(0,48,0,18)
+EspToggle.Position = UDim2.new(1,-58,0,0)
+EspToggle.BackgroundColor3 = Color3.fromRGB(50,6,6)
+EspToggle.TextColor3 = Color3.fromRGB(255,255,255)
+EspToggle.Text = "OFF"
+EspToggle.Font = Enum.Font.Gotham
+EspToggle.TextSize = 10
+EspToggle.Parent = EspPage
+
+local EspTitle = MakeWhiteLabel(EspPage, {Size=UDim2.new(0.6,0,0,18), Position=UDim2.new(0,6,0,0), Text="ESP", Font=Enum.Font.GothamSemibold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left})
+local HighlightLabel = MakeWhiteLabel(EspPage, {Size=UDim2.new(0.6,0,0,18), Position=UDim2.new(0,6,0,22), Text="Player Highlights", Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+local HighlightToggle = Instance.new("TextButton")
+HighlightToggle.Name = "HighlightToggle"
+HighlightToggle.Size = UDim2.new(0,48,0,18)
+HighlightToggle.Position = UDim2.new(1,-58,0,22)
+HighlightToggle.BackgroundColor3 = Color3.fromRGB(0,180,80)
+HighlightToggle.TextColor3 = Color3.fromRGB(255,255,255)
+HighlightToggle.Text = "ON"
+HighlightToggle.Font = Enum.Font.Gotham
+HighlightToggle.TextSize = 10
+HighlightToggle.Parent = EspPage
+
+local NameTagsLabel = MakeWhiteLabel(EspPage, {Size=UDim2.new(0.6,0,0,18), Position=UDim2.new(0,6,0,44), Text="Name Tags", Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+local NameTagsToggle = Instance.new("TextButton")
+NameTagsToggle.Name = "NameTagsToggle"
+NameTagsToggle.Size = UDim2.new(0,48,0,18)
+NameTagsToggle.Position = UDim2.new(1,-58,0,44)
+NameTagsToggle.BackgroundColor3 = Color3.fromRGB(0,180,80)
+NameTagsToggle.TextColor3 = Color3.fromRGB(255,255,255)
+NameTagsToggle.Text = "ON"
+NameTagsToggle.Font = Enum.Font.Gotham
+NameTagsToggle.TextSize = 10
+NameTagsToggle.Parent = EspPage
+
+local DistanceLabel = MakeWhiteLabel(EspPage, {Size=UDim2.new(0.6,0,0,18), Position=UDim2.new(0,6,0,66), Text="Distance Display", Font=Enum.Font.Gotham, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left})
+local DistanceToggle = Instance.new("TextButton")
+DistanceToggle.Name = "DistanceToggle"
+DistanceToggle.Size = UDim2.new(0,48,0,18)
+DistanceToggle.Position = UDim2.new(1,-58,0,66)
+DistanceToggle.BackgroundColor3 = Color3.fromRGB(0,180,80)
+DistanceToggle.TextColor3 = Color3.fromRGB(255,255,255)
+DistanceToggle.Text = "ON"
+DistanceToggle.Font = Enum.Font.Gotham
+DistanceToggle.TextSize = 10
+DistanceToggle.Parent = EspPage
+
+local FloatingIcon = Instance.new("TextButton")
+FloatingIcon.Name = "VRTX"
+FloatingIcon.Size = UDim2.new(0,44,0,44)
+FloatingIcon.Position = UDim2.new(0,10,0,10)
+FloatingIcon.BackgroundColor3 = Color3.fromRGB(18,0,0)
+FloatingIcon.BorderSizePixel = 0
+FloatingIcon.Active = true
+FloatingIcon.AutoButtonColor = false
+FloatingIcon.Text = "VRTX"
+FloatingIcon.TextColor3 = Color3.fromRGB(255,255,255)
+FloatingIcon.Font = Enum.Font.GothamBold
+FloatingIcon.TextSize = 18
+FloatingIcon.Visible = false
+FloatingIcon.Parent = VortexGui
+
+local function addCornerRadius(obj, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 6)
+    c.Parent = obj
+end
+addCornerRadius(MainFrame,6)
+addCornerRadius(TopBar,6)
+addCornerRadius(TabContainer,6)
+addCornerRadius(FloatingIcon,8)
+addCornerRadius(CloseButton,6)
+
+coroutine.wrap(function()
+    local ok, err = pcall(function() ContentProvider:PreloadAsync({FloatingIcon}) end)
+    if not ok then
+        FloatingIcon.Text = "VRTX"
+    end
+end)()
+
+local function tweenObject(object, props, time, style, dir, onComplete)
+    local ti = TweenService:Create(object, TweenInfo.new(time or 0.28, style or Enum.EasingStyle.Sine, dir or Enum.EasingDirection.Out), props)
+    ti:Play()
+    if onComplete then
+        ti.Completed:Connect(onComplete)
+    end
+    return ti
+end
+
+local function OpenGUI()
+    if FloatingIcon.Visible then
+        tweenObject(FloatingIcon, {BackgroundTransparency = 1, Size = UDim2.new(0,36,0,36)}, 0.12, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+        delay(0.12, function() FloatingIcon.Visible = false end)
+    end
+    MainFrame.Visible = true
+    MainFrame.Size = UDim2.new(0, 8, 0, 8)
+    MainFrame.Position = UDim2.new(0.5, -4, 0.5, -4)
+    MainFrame.BackgroundTransparency = 0
+    tweenObject(MainFrame, {Size = UDim2.new(0, UI_WIDTH, 0, UI_HEIGHT), Position = UI_POS}, 0.32, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+end
+
+local function CloseGUI()
+    tweenObject(MainFrame, {Size = UDim2.new(0, 8, 0, 8), Position = UDim2.new(0.5, -4, 0.5, -4)}, 0.24, Enum.EasingStyle.Sine, Enum.EasingDirection.In, function()
+        MainFrame.Visible = false
+        FloatingIcon.BackgroundTransparency = 1
+        FloatingIcon.Size = UDim2.new(0,28,0,28)
+        FloatingIcon.Visible = true
+        tweenObject(FloatingIcon, {BackgroundTransparency = 0, Size = UDim2.new(0,44,0,44)}, 0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    end)
+end
+
+local function createFakeHead(player)
+    if not player.Character then return end
+    local head = player.Character:FindFirstChild("Head")
+    if not head then return end
+    if swappedHeads[player] then return end
+    swappedHeads[player] = {OriginalHead = head, OriginalName = head.Name, Parent = head.Parent}
+    head.Name = "Vortex_OriginalHead"
+    local fake = Instance.new("Part")
+    fake.Name = "Head"
+    fake.Size = Vector3.new(Config.HeadSize, Config.HeadSize, Config.HeadSize)
+    fake.CFrame = head.CFrame
+    fake.CanCollide = false
+    fake.Anchored = false
+    fake.Massless = true
+    fake.Locked = true
+    fake.Transparency = 0
+    fake.Material = Enum.Material.Neon
+    fake.BrickColor = BrickColor.new("Really red")
+    fake.Parent = player.Character
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = fake
+    weld.Part1 = head
+    weld.Parent = fake
+    local headMesh = head:FindFirstChildOfClass("SpecialMesh")
+    if headMesh then
+        local copyMesh = headMesh:Clone()
+        copyMesh.Parent = fake
+    end
+    fake:SetAttribute("VortexFakeHead", true)
+end
+
+local function restoreHead(player)
+    local data = swappedHeads[player]
+    if not data then return end
+    if data.OriginalHead and data.OriginalHead.Parent then
+        data.OriginalHead.Name = data.OriginalName or "Head"
+    end
+    if player.Character then
+        for _, part in ipairs(player.Character:GetChildren()) do
+            if part:IsA("BasePart") and part:GetAttribute("VortexFakeHead") then
+                part:Destroy()
+            end
+        end
+    end
+    swappedHeads[player] = nil
+end
+
+local function UpdateHitboxes()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= localPlayer and player.Character then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if not humanoid or humanoid.Health <= 0 then
+                restoreHead(player)
+            else
+                if Config.HeadSolid then
+                    if not swappedHeads[player] then
+                        swap = pcall(function() createFakeHead(player) end)
+                    end
+                    local fake = nil
+                    for _, part in ipairs(player.Character:GetChildren()) do
+                        if part:IsA("BasePart") and part:GetAttribute("VortexFakeHead") then fake = part break end
+                    end
+                    if fake then
+                        fake.Size = Vector3.new(Config.HeadSize, Config.HeadSize, Config.HeadSize)
+                        fake.Transparency = 0
+                        fake.Material = Enum.Material.Neon
+                        fake.BrickColor = BrickColor.new("Really red")
+                        fake.CanCollide = false
+                        local orig = player.Character:FindFirstChild("Vortex_OriginalHead")
+                        if orig then orig.Transparency = 1 end
+                    end
+                else
+                    if swappedHeads[player] then restoreHead(player) end
+                    local head = player.Character:FindFirstChild("Head")
+                    if head then
+                        pcall(function()
+                            head.Size = Vector3.new(Config.HeadSize, Config.HeadSize, Config.HeadSize)
+                            head.Transparency = Config.HeadTransparency
+                            head.BrickColor = BrickColor.new("Really red")
+                            head.Material = Enum.Material.Neon
+                            head.CanCollide = false
+                            head.Massless = true
+                        end)
+                    end
+                end
+            end
+        end
+    end
+end
+
+local HbeConnection
+local function StartHBE()
+    if HbeConnection then HbeConnection:Disconnect() end
+    HbeConnection = RunService.RenderStepped:Connect(function()
+        if Config.HbeEnabled then
+            pcall(UpdateHitboxes)
+        end
+    end)
+end
+
+local function StopHBE()
+    if HbeConnection then HbeConnection:Disconnect(); HbeConnection = nil end
+    for _, player in ipairs(Players:GetPlayers()) do
+        restoreHead(player)
+        if player.Character then
+            local head = player.Character:FindFirstChild("Head")
+            if head then
+                pcall(function()
+                    head.Size = Vector3.new(2,1,1)
+                    head.Transparency = 0
+                    head.BrickColor = BrickColor.new("Bright yellow")
+                    head.Material = Enum.Material.Plastic
+                    head.CanCollide = true
+                end)
+            end
+        end
+    end
+end
+
+local function CreateESP(player)
+    if ESPObjects[player] then return end
+    local espFolder = Instance.new("Folder")
+    espFolder.Name = "VortexESP"
+    ESPObjects[player] = espFolder
+    if player.Character then
+        local head = player.Character:FindFirstChild("Head")
+        local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+        if head and humanoidRootPart then
+            if Config.EspHighlight then
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "ESP_Highlight"
+                highlight.FillColor = Color3.fromRGB(255,0,0)
+                highlight.OutlineColor = Color3.fromRGB(255,255,255)
+                highlight.FillTransparency = 0.5
+                highlight.OutlineTransparency = 0
+                highlight.Parent = espFolder
+                highlight.Adornee = player.Character
+            end
+            if Config.EspNameTags then
+                local billboard = Instance.new("BillboardGui")
+                billboard.Name = "ESP_Name"
+                billboard.Size = UDim2.new(0,120,0,24)
+                billboard.StudsOffset = Vector3.new(0,2.5,0)
+                billboard.AlwaysOnTop = true
+                billboard.Adornee = head
+                billboard.Parent = espFolder
+                local nameLabel = Instance.new("TextLabel")
+                nameLabel.Size = UDim2.new(1,0,1,0)
+                nameLabel.BackgroundTransparency = 1
+                nameLabel.Text = player.Name
+                nameLabel.TextColor3 = Color3.fromRGB(255,255,255)
+                nameLabel.Font = Enum.Font.Gotham
+                nameLabel.TextSize = 12
+                nameLabel.Parent = billboard
+            end
+            if Config.EspDistance then
+                local distanceBillboard = Instance.new("BillboardGui")
+                distanceBillboard.Name = "ESP_Distance"
+                distanceBillboard.Size = UDim2.new(0,100,0,20)
+                distanceBillboard.StudsOffset = Vector3.new(0,1.2,0)
+                distanceBillboard.AlwaysOnTop = true
+                distanceBillboard.Adornee = head
+                distanceBillboard.Parent = espFolder
+                local distanceLabel = Instance.new("TextLabel")
+                distanceLabel.Size = UDim2.new(1,0,1,0)
+                distanceLabel.BackgroundTransparency = 1
+                distanceLabel.TextColor3 = Color3.fromRGB(0,255,255)
+                distanceLabel.TextStrokeTransparency = 0
+                distanceLabel.TextSize = 11
+                distanceLabel.Font = Enum.Font.Gotham
+                distanceLabel.Parent = distanceBillboard
+            end
+            espFolder.Parent = player.Character
+        end
+    end
+end
+
+local function UpdateESP()
+    for player, espFolder in pairs(ESPObjects) do
+        if player.Character and espFolder.Parent == nil then espFolder.Parent = player.Character end
+        if Config.EspDistance then
+            local distanceBillboard = espFolder:FindFirstChild("ESP_Distance")
+            if distanceBillboard and localPlayer.Character then
+                local localRoot = localPlayer.Character:FindFirstChild("HumanoidRootPart")
+                local playerRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                if localRoot and playerRoot then
+                    local distance = (localRoot.Position - playerRoot.Position).Magnitude
+                    local distanceLabel = distanceBillboard:FindFirstChildOfClass("TextLabel")
+                    if distanceLabel then distanceLabel.Text = string.format("[%d studs]", math.floor(distance)) end
+                end
+            end
+        end
+    end
+end
+
+local function RemoveESP(player)
+    if ESPObjects[player] then
+        ESPObjects[player]:Destroy()
+        ESPObjects[player] = nil
+    end
+end
+
+local function CleanupESP()
+    for player, espFolder in pairs(ESPObjects) do
+        if not player:IsDescendantOf(Players) then RemoveESP(player) end
+    end
+end
+
+local function RefreshESP()
+    for p in pairs(ESPObjects) do RemoveESP(p) end
+    if Config.EspEnabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= localPlayer then CreateESP(p) end
+        end
+    end
+end
+
+local EspConnection
+local function StartESP()
+    if EspConnection then EspConnection:Disconnect() end
+    for _, p in ipairs(Players:GetPlayers()) do if p ~= localPlayer then CreateESP(p) end end
+    EspConnection = RunService.RenderStepped:Connect(function()
+        if Config.EspEnabled then
+            pcall(UpdateESP)
+            pcall(CleanupESP)
+        end
+    end)
+end
+
+local function StopESP()
+    if EspConnection then EspConnection:Disconnect(); EspConnection = nil end
+    for p in pairs(ESPObjects) do RemoveESP(p) end
+end
+
+local function OnPlayerCharacterAdded(player)
+    if Config.EspEnabled then wait(0.5); CreateESP(player) end
+end
+
+local function PlayerAdded(player)
+    player.CharacterAdded:Connect(function() OnPlayerCharacterAdded(player) end)
+end
+
+local function PlayerRemoving(player)
+    RemoveESP(player)
+    restoreHead(player)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do if p ~= localPlayer then PlayerAdded(p) end end
+Players.PlayerAdded:Connect(PlayerAdded)
+Players.PlayerRemoving:Connect(PlayerRemoving)
+
+local function SwitchTab(tabName)
+    Config.CurrentTab = tabName
+    if tabName == "HBE" then
+        HbePage.Visible = true
+        EspPage.Visible = false
+        HbeTab.BackgroundColor3 = Color3.fromRGB(90,10,10)
+        EspTab.BackgroundColor3 = Color3.fromRGB(12,12,12)
+    else
+        HbePage.Visible = false
+        EspPage.Visible = true
+        HbeTab.BackgroundColor3 = Color3.fromRGB(12,12,12)
+        EspTab.BackgroundColor3 = Color3.fromRGB(90,10,10)
+    end
+end
+
+HbeTab.MouseButton1Click:Connect(function() SwitchTab("HBE") end)
+EspTab.MouseButton1Click:Connect(function() SwitchTab("ESP") end)
+
+HbeToggle.MouseButton1Click:Connect(function()
+    Config.HbeEnabled = not Config.HbeEnabled
+    if Config.HbeEnabled then
+        HbeToggle.BackgroundColor3 = Color3.fromRGB(10,80,10)
+        HbeToggle.Text = "ON"
+        StartHBE()
+    else
+        HbeToggle.BackgroundColor3 = Color3.fromRGB(50,6,6)
+        HbeToggle.Text = "OFF"
+        StopHBE()
+    end
+end)
+
+EspToggle.MouseButton1Click:Connect(function()
+    Config.EspEnabled = not Config.EspEnabled
+    if Config.EspEnabled then
+        EspToggle.BackgroundColor3 = Color3.fromRGB(10,80,10)
+        EspToggle.Text = "ON"
+        StartESP()
+        RefreshESP()
+    else
+        EspToggle.BackgroundColor3 = Color3.fromRGB(50,6,6)
+        EspToggle.Text = "OFF"
+        StopESP()
+    end
+end)
+
+HighlightToggle.MouseButton1Click:Connect(function()
+    Config.EspHighlight = not Config.EspHighlight
+    if Config.EspHighlight then
+        HighlightToggle.BackgroundColor3 = Color3.fromRGB(0,180,80)
+        HighlightToggle.Text = "ON"
+    else
+        HighlightToggle.BackgroundColor3 = Color3.fromRGB(60,60,65)
+        HighlightToggle.Text = "OFF"
+    end
+    RefreshESP()
+end)
+
+NameTagsToggle.MouseButton1Click:Connect(function()
+    Config.EspNameTags = not Config.EspNameTags
+    if Config.EspNameTags then
+        NameTagsToggle.BackgroundColor3 = Color3.fromRGB(0,180,80)
+        NameTagsToggle.Text = "ON"
+    else
+        NameTagsToggle.BackgroundColor3 = Color3.fromRGB(60,60,65)
+        NameTagsToggle.Text = "OFF"
+    end
+    RefreshESP()
+end)
+
+DistanceToggle.MouseButton1Click:Connect(function()
+    Config.EspDistance = not Config.EspDistance
+    if Config.EspDistance then
+        DistanceToggle.BackgroundColor3 = Color3.fromRGB(0,180,80)
+        DistanceToggle.Text = "ON"
+    else
+        DistanceToggle.BackgroundColor3 = Color3.fromRGB(60,60,65)
+        DistanceToggle.Text = "OFF"
+    end
+    RefreshESP()
+end)
+
+HeadSolidToggle.MouseButton1Click:Connect(function()
+    Config.HeadSolid = not Config.HeadSolid
+    if Config.HeadSolid then HeadSolidToggle.BackgroundColor3 = Color3.fromRGB(10,80,10); HeadSolidToggle.Text = "ON" else HeadSolidToggle.BackgroundColor3 = Color3.fromRGB(50,6,6); HeadSolidToggle.Text = "OFF" end
+    if Config.HbeEnabled then pcall(UpdateHitboxes) end
+end)
+
+HeadSizeBox.FocusLost:Connect(function()
+    local n = tonumber(HeadSizeBox.Text)
+    if n and n>=1 and n<=50 then Config.HeadSize = n; HeadSizeBox.Text = tostring(n); if Config.HbeEnabled then pcall(UpdateHitboxes) end else HeadSizeBox.Text = tostring(Config.HeadSize) end
+end)
+
+TransparencyBox.FocusLost:Connect(function()
+    local n = tonumber(TransparencyBox.Text)
+    if n and n>=0 and n<=1 then Config.HeadTransparency = n; TransparencyBox.Text = string.format("%.2f",n); if Config.HbeEnabled then pcall(UpdateHitboxes) end else TransparencyBox.Text = string.format("%.2f",Config.HeadTransparency) end
+end)
+
+CloseButton.MouseButton1Click:Connect(function() CloseGUI() end)
+
+FloatingIcon.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        FloatingIconDragging = true
+        dragInput = input
+        dragStart = input.Position
+        startPos = FloatingIcon.Position
+        dragMoved = false
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                if not dragMoved then
+                    OpenGUI()
+                end
+                FloatingIconDragging = false
+                dragInput, dragStart, startPos, dragMoved = nil, nil, nil, false
+            end
+        end)
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragInput and input == dragInput then
+        local delta = input.Position - dragStart
+        if delta.Magnitude > 6 then dragMoved = true end
+        if FloatingIconDragging then
+            local startX = startPos.X.Offset
+            local startY = startPos.Y.Offset
+            local newX = startX + delta.X
+            local newY = startY + delta.Y
+            local viewport = workspaceCamera and workspaceCamera.ViewportSize or Vector2.new(1280,720)
+            local iconSize = FloatingIcon.AbsoluteSize
+            newX = math.clamp(newX, 0, math.max(0, viewport.X - iconSize.X))
+            newY = math.clamp(newY, 0, math.max(0, viewport.Y - iconSize.Y))
+            FloatingIcon.Position = UDim2.new(0, newX, 0, newY)
+        end
+    end
+end)
+
+FloatingIcon.MouseButton1Click:Connect(function()
+    wait(0.06)
+    if not FloatingIconDragging then OpenGUI() end
+end)
+
+MainFrame.Visible = true
+FloatingIcon.Visible = false
+
+StopHBE()
+StopESP()
+SwitchTab("HBE")
